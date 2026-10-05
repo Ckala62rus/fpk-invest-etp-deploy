@@ -121,6 +121,8 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-}
+      # Сервер Docker использует IPv4-only bridge; образ по умолчанию слушает ::.
+      PGADMIN_LISTEN_ADDRESS: "0.0.0.0"
       PGADMIN_CONFIG_SERVER_MODE: "True"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
       PGADMIN_CONFIG_ALLOW_SAVE_PASSWORD: "False"
