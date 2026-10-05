@@ -6,8 +6,8 @@
 
 | Путь | Назначение |
 |------|------------|
-| `docker-compose.yml` | Базовый production-стек (gateway + API + DB + Redis + Horizon + Reverb) и профиль `mailhog` только для test-сервера |
-| `.env.example` | Пароли Postgres, порты 80/443 и локальный порт UI MailHog |
+| `docker-compose.yml` | Базовый production-стек (gateway + API + DB + Redis + Horizon + Reverb) и test-only профили `mailhog` / `pgadmin` |
+| `.env.example` | Пароли Postgres, порты 80/443 и loopback-порты интерфейсов MailHog / pgAdmin |
 | `nginx/` | Публичный gateway: HTTP/HTTPS vhost, сертификаты, snippets |
 | `../backend/docker/nginx/` | Внутренний nginx → PHP-FPM; `conf.d/default.conf` обязан быть в backend Git-репозитории |
 | `scripts/switch-tls.sh` | Быстрое переключение HTTP ↔ HTTPS |

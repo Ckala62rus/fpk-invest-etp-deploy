@@ -110,6 +110,29 @@ services:
     networks:
       - etp
 
+  # Инструмент администрирования БД только для test-сервера.
+  # Доступен через SSH tunnel; PostgreSQL порт наружу не публикуется.
+  pgadmin-etp:
+    image: dpage/pgadmin4:8.14@sha256:8a68677a97b8c8d1427dc915672a26d2c4a04376916a68256f53d669d6171be7
+    container_name: pgadmin-etp
+    profiles: ["pgadmin"]
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
+      PGADMIN_CONFIG_ALLOW_SAVE_PASSWORD: "False"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgres-etp:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - etp
+
   scheduler-etp:
     build:
       context: ../backend
@@ -182,6 +205,9 @@ services:
     restart: unless-stopped
     networks:
       - etp
+
+volumes:
+  pgadmin-data:
 
 networks:
   etp:

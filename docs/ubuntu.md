@@ -127,6 +127,47 @@ ssh -N -L 8025:127.0.0.1:8025 <USER>@<TEST_SERVER>
 
 Проверка: создайте нового пользователя и откройте письмо подтверждения email в MailHog; для существующего пользователя используйте страницу восстановления пароля. Письмо восстановления содержит одноразовый токен, который нужно вставить в форму reset, а не готовую ссылку.
 
+### pgAdmin только для test-сервера
+
+pgAdmin также отключён по умолчанию. В `deploy/.env` задайте уникальные данные для входа в его UI:
+
+```dotenv
+PGADMIN_PORT=5050
+PGADMIN_DEFAULT_EMAIL=ваш_email_администратора
+PGADMIN_DEFAULT_PASSWORD=уникальный_сложный_пароль
+```
+
+Запустите pgAdmin только по необходимости:
+
+```bash
+cd /opt/etp/deploy
+docker compose --profile pgadmin up -d pgadmin-etp
+```
+
+Интерфейс доступен только на `127.0.0.1:5050` сервера. Не открывайте этот порт в firewall и не добавляйте reverse proxy. На рабочем компьютере создайте SSH-tunnel:
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:5050:127.0.0.1:5050 \
+  <USER>@<TEST_SERVER>
+```
+
+Откройте `http://127.0.0.1:5050`, войдите с `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD`, затем добавьте сервер вручную:
+
+```text
+Host name/address: postgres-etp
+Port: 5432
+Maintenance database: etp
+Username: etp
+Password: значение POSTGRES_PASSWORD из deploy/.env
+```
+
+Не сохраняйте пароль PostgreSQL в pgAdmin. После работы остановите UI, не затрагивая БД:
+
+```bash
+docker compose --profile pgadmin stop pgadmin-etp
+```
+
 Для HTTP по IP `10.60.25.87`:
 
 ```dotenv
