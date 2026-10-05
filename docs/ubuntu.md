@@ -91,7 +91,41 @@ docker run --rm php:8.4-cli-alpine php -r 'echo "base64:".base64_encode(random_b
 - `DB_PASSWORD` — в точности `POSTGRES_PASSWORD` из `deploy/.env`;
 - `REVERB_APP_KEY` и `REVERB_APP_SECRET` — случайные строки;
 - `SUPER_ADMIN_INN`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`;
-- production SMTP через `MAIL_*` (для теста допустим `MAIL_MAILER=log`).
+- production SMTP через `MAIL_*`; на test-сервере используйте MailHog по инструкции ниже.
+
+### MailHog только для test-сервера
+
+По умолчанию Compose не запускает MailHog. Для получения тестовых писем, включая ссылку подтверждения email и токен восстановления пароля, в `backend/src/.env` задайте:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_SCHEME=null
+MAIL_HOST=mailhog-etp
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_FROM_ADDRESS="noreply@test.etp.local"
+MAIL_FROM_NAME="${APP_NAME}"
+```
+
+Не задавайте `MAIL_URL`: он может переопределить отдельные SMTP-переменные. Затем включите профиль и примените изменённую Laravel-конфигурацию:
+
+```bash
+cd /opt/etp/deploy
+docker compose --profile mailhog up -d mailhog-etp
+docker compose exec backend-etp php artisan config:clear
+docker compose restart backend-etp horizon-etp scheduler-etp
+```
+
+MailHog SMTP не опубликован наружу. Его UI привязан только к `127.0.0.1:8025` сервера и содержит секретные ссылки/токены, поэтому не открывайте этот порт в firewall и не проксируйте его через public gateway. На рабочем компьютере поднимите SSH-tunnel:
+
+```bash
+ssh -N -L 8025:127.0.0.1:8025 <USER>@<TEST_SERVER>
+```
+
+После этого откройте в браузере `http://localhost:8025`. Для следующего полного запуска test-стека используйте `docker compose --profile mailhog up -d --build`; обычный production-запуск профиль не включает.
+
+Проверка: создайте нового пользователя и откройте письмо подтверждения email в MailHog; для существующего пользователя используйте страницу восстановления пароля. Письмо восстановления содержит одноразовый токен, который нужно вставить в форму reset, а не готовую ссылку.
 
 Для HTTP по IP `10.60.25.87`:
 

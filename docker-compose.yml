@@ -98,6 +98,18 @@ services:
     networks:
       - etp
 
+  # Тестовый SMTP-приёмник. В production не запускается без профиля mailhog.
+  # UI содержит письма с токенами/ссылками, поэтому доступен только через SSH tunnel.
+  mailhog-etp:
+    image: mailhog/mailhog:v1.0.1
+    container_name: mailhog-etp
+    profiles: ["mailhog"]
+    ports:
+      - "127.0.0.1:${MAILHOG_UI_PORT:-8025}:8025"
+    restart: unless-stopped
+    networks:
+      - etp
+
   scheduler-etp:
     build:
       context: ../backend
