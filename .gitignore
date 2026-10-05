@@ -1,0 +1,7 @@
+# Server-specific Compose secrets
+/.env
+
+# Runtime state and generated files
+nginx/logs/
+nginx/certs/*.pem
+nginx/certbot-webroot/

@@ -1,0 +1,176 @@
+# Production Docker Compose — ЭТП (электронная торговая площадка)
+# Запуск из каталога deploy/:
+#   cp .env.example .env   # заполнить
+#   ./scripts/switch-tls.sh http   # или https после сертификатов
+#   docker compose up -d --build
+#
+# Публично: gateway :80 (и :443 при HTTPS). Postgres/Redis/MailHog наружу не торчат.
+
+name: etp-prod
+
+services:
+  gateway-etp:
+    image: nginx:1.27-alpine
+    container_name: gateway-etp
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/logs:/var/log/nginx
+      - ../frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      - nginx-etp
+      - reverb-etp
+    restart: unless-stopped
+    networks:
+      - etp
+
+  backend-etp:
+    build:
+      context: ../backend
+      dockerfile: docker/php/Dockerfile
+    container_name: backend-etp
+    working_dir: /var/www
+    volumes:
+      - ../backend/docker/php/config/php.ini:/usr/local/etc/php/conf.d/40-custom.ini:ro
+      - ../backend/src:/var/www
+      - ../backend/docker/php/logs:/var/log/php
+    depends_on:
+      postgres-etp:
+        condition: service_healthy
+      redis-etp:
+        condition: service_started
+    env_file:
+      - ../backend/src/.env
+    environment:
+      XDEBUG_MODE: "off"
+    restart: unless-stopped
+    networks:
+      - etp
+
+  # Внутренний nginx → PHP-FPM (не публикуем порт на хост)
+  nginx-etp:
+    image: nginx:1.27-alpine
+    container_name: nginx-etp
+    volumes:
+      - ../backend/docker/nginx/config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../backend/docker/nginx/config/conf.d:/etc/nginx/conf.d:ro
+      - ../backend/src:/var/www:ro
+    depends_on:
+      - backend-etp
+    restart: unless-stopped
+    networks:
+      - etp
+
+  postgres-etp:
+    image: postgres:16-alpine
+    container_name: postgres-etp
+    volumes:
+      - ../backend/docker/postgres/data:/var/lib/postgresql
+      - ../backend/docker/postgres/logs:/var/log/postgresql
+    environment:
+      PGDATA: /var/lib/postgresql/pgdata
+      POSTGRES_DB: ${POSTGRES_DB:-etp}
+      POSTGRES_USER: ${POSTGRES_USER:-etp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-etp} -d ${POSTGRES_DB:-etp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - etp
+
+  redis-etp:
+    image: redis:7-alpine
+    container_name: redis-etp
+    volumes:
+      - ../backend/docker/redis/data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    networks:
+      - etp
+
+  scheduler-etp:
+    build:
+      context: ../backend
+      dockerfile: docker/php/Dockerfile
+    container_name: scheduler-etp
+    working_dir: /var/www
+    user: "www-data:www-data"
+    command: ["php", "artisan", "schedule:work"]
+    volumes:
+      - ../backend/src:/var/www
+    depends_on:
+      postgres-etp:
+        condition: service_healthy
+      redis-etp:
+        condition: service_started
+    env_file:
+      - ../backend/src/.env
+    environment:
+      XDEBUG_MODE: "off"
+    restart: unless-stopped
+    networks:
+      - etp
+
+  horizon-etp:
+    build:
+      context: ../backend
+      dockerfile: docker/php/Dockerfile
+    container_name: horizon-etp
+    working_dir: /var/www
+    user: "www-data:www-data"
+    command: ["php", "artisan", "horizon"]
+    volumes:
+      - ../backend/src:/var/www
+    depends_on:
+      postgres-etp:
+        condition: service_healthy
+      redis-etp:
+        condition: service_started
+    env_file:
+      - ../backend/src/.env
+    environment:
+      XDEBUG_MODE: "off"
+    restart: unless-stopped
+    networks:
+      - etp
+
+  # Reverb только во внутренней сети; снаружи — через gateway /app (ws/wss)
+  # www-data: иначе storage/logs от root → Permission denied у PHP-FPM при публикации ТЗП и т.п.
+  reverb-etp:
+    build:
+      context: ../backend
+      dockerfile: docker/php/Dockerfile
+    container_name: reverb-etp
+    working_dir: /var/www
+    user: "www-data:www-data"
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=6001"]
+    volumes:
+      - ../backend/src:/var/www
+    depends_on:
+      redis-etp:
+        condition: service_started
+      backend-etp:
+        condition: service_started
+    env_file:
+      - ../backend/src/.env
+    environment:
+      XDEBUG_MODE: "off"
+      REVERB_SERVER_HOST: "0.0.0.0"
+      REVERB_SERVER_PORT: "6001"
+    restart: unless-stopped
+    networks:
+      - etp
+
+networks:
+  etp:
+    driver: bridge
